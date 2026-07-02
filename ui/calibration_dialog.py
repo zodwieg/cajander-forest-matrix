@@ -19,8 +19,9 @@ from ..config.coefficients import REGISTRY, get_coefficients, save_coefficients
 class CalibrationDialog(QDialog):
     run_algorithm_requested = pyqtSignal(dict, bool)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent, on_param_toggle):
         super().__init__(parent)
+        self.on_param_toggle = on_param_toggle
         self.setWindowTitle("Калибровка алгоритма биомов (MVP)")
         self.resize(500, 600)
         self._state = {}
@@ -120,6 +121,7 @@ class CalibrationDialog(QDialog):
             groups_meta=biome_meta["groups"],
             current_values=current_values,
             on_param_change=on_param_change,
+            on_param_toggle=self.on_param_toggle,
         )
 
         for box in group_boxes:

@@ -7,6 +7,8 @@ from qgis.core import (
     QgsProcessingAlgRunnerTask,
     QgsProcessingContext,  # Нативный класс контекста
     QgsRasterLayer,
+    QgsMessageLog,
+    Qgis,
 )
 import os
 from ..ui.calibration_dialog import CalibrationDialog
@@ -22,8 +24,21 @@ class CalibrationController:
         self._progress_dialog = None  # Добавим в init для порядка
 
     def show_dialog(self):
+        def handle_param_toggle(param_id: str, is_enabled: bool):
+            QgsMessageLog.logMessage(
+                f"Параметр {param_id} {'включен' if is_enabled else 'отключен'}",
+                "Cajander Matrix",
+                Qgis.MessageLevel.Info,
+            )
+            # Ваша сложная логика записи в сервис/алгоритм
+            # self.settings_service.set_param_enabled(param_id, is_enabled)
+            # Если нужно, сразу дергаем пересчет
+            # self.refresh_preview()
+
         if self._dialog is None:
-            self._dialog = CalibrationDialog(self.iface.mainWindow())
+            self._dialog = CalibrationDialog(
+                parent=self.iface.mainWindow(), on_param_toggle=handle_param_toggle
+            )
             self._dialog.run_algorithm_requested.connect(self._execute_algorithm)
             self._dialog.finished.connect(self._cleanup_dialog)
         self._dialog.show()

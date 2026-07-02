@@ -15,6 +15,8 @@ def classify_biome_400(final_matrix: np.ndarray) -> np.ndarray:
     b04_3 = get_raster("B04_3")
     ndwi_5 = get_raster("NDWI_5")
     ndre_7 = get_raster("NDRE_7")
+    twi = get_raster("TWI")
+    ndii_7 = get_raster("NDII_7")
 
     # 3. Загружаем коэффициенты
     t400 = get_coefficients().biome("400")
@@ -26,6 +28,8 @@ def classify_biome_400(final_matrix: np.ndarray) -> np.ndarray:
         & (b04_3 > t400.B043_MIN)
         & (ndwi_5 > t400.NDWI5_MIN)
         & (ndre_7 < t400.NDRE_MAX)
+        & (twi > t400.TWI_MIN)
+        & (ndii_7 > t400.NDII_MIN)
     )
 
     # 5. Выжигаем код биома в финальную матрицу
