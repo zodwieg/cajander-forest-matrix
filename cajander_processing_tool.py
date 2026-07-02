@@ -93,5 +93,4 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
         return CajanderMatrixAlgorithm()
 
     def createCustomParametersWidget(self, parent):
-        # Возвращаем None, чтобы QGIS не пытался строить дефолтный UI внутри себя
         return None

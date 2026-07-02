@@ -13,7 +13,12 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 # Импортируем наши модули ядра UI
 from .core.form_builder import FormBuilder
-from ..config.coefficients import REGISTRY, get_coefficients, save_coefficients
+from ..config.coefficients import (
+    REGISTRY,
+    get_coefficients,
+    save_coefficients,
+)
+from ..config.coefficients.models import CalibrationCoefficients
 
 
 class CalibrationDialog(QDialog):
@@ -32,23 +37,31 @@ class CalibrationDialog(QDialog):
     def _load_current_state(self):
         """
         Загружает ТЕКУЩИЕ сохраненные коэффициенты из синглтона в локальный State.
-        Заполняет пропуски дефолтными значениями, если каких-то данных нет.
+        Теперь стейт хранит и значения, и флаги активности параметров.
         """
-
         coeffs = get_coefficients()
 
         for biome_id, biome_meta in REGISTRY.items():
             self._state[biome_id] = {}
-
-            # Получаем объект коэффициентов конкретного биома
-            # (Адаптируй эту строчку под точный синтаксис твоего coeffs.biome())
             biome_coeffs = coeffs.biome(biome_id)
 
             for group_id, group in biome_meta["groups"].items():
                 for param in group["parameters"]:
                     param_id = param["id"]
+
+                    # Извлекаем float-значение (через __getattr__) и статус из модели
                     current_value = getattr(biome_coeffs, param_id, param["default"])
-                    self._state[biome_id][param_id] = current_value
+                    is_enabled = (
+                        biome_coeffs.is_enabled(param_id)
+                        if hasattr(biome_coeffs, "is_enabled")
+                        else True
+                    )
+
+                    # Сохраняем в стейт структурировано
+                    self._state[biome_id][param_id] = {
+                        "value": current_value,
+                        "is_enabled": is_enabled,
+                    }
 
     def _init_ui(self):
         """Создает статичный каркас окна"""
@@ -62,7 +75,6 @@ class CalibrationDialog(QDialog):
 
         self.biome_selector = QComboBox()
         for biome_id, biome_meta in REGISTRY.items():
-            # userData привязывает невидимый ID к строке
             self.biome_selector.addItem(biome_meta["name"], userData=biome_id)
 
         self.biome_selector.currentIndexChanged.connect(self._handle_biome_changed)
@@ -72,7 +84,7 @@ class CalibrationDialog(QDialog):
         self.cb_replace_raster = QCheckBox(
             "Заменять предыдущий растр (Replace previous raster)"
         )
-        self.cb_replace_raster.setChecked(True)  # Включена по умолчанию
+        self.cb_replace_raster.setChecked(True)
         main_layout.addWidget(self.cb_replace_raster)
 
         self.scroll_area = QScrollArea()
@@ -91,7 +103,7 @@ class CalibrationDialog(QDialog):
         self.btn_save.setDefault(True)
 
         buttons_layout.addStretch()
-        buttons_layout.addWidget(self.btn_save)  # Здесь тоже меняем на self.btn_save
+        buttons_layout.addWidget(self.btn_save)
         buttons_layout.addWidget(btn_cancel)
         main_layout.addLayout(buttons_layout)
 
@@ -111,17 +123,25 @@ class CalibrationDialog(QDialog):
         dynamic_layout.setSpacing(10)
 
         biome_meta = REGISTRY[biome_id]
-        current_values = self._state[biome_id]
+
+        current_values = {}
+        for pid, pdata in self._state[biome_id].items():
+            current_values[pid] = pdata["value"]
+            current_values[f"{pid}_enabled"] = pdata["is_enabled"]
 
         on_param_change = lambda param_id, value: self._update_param_value(
             biome_id, param_id, value
+        )
+
+        on_param_toggle = lambda param_id, checked: self._update_param_toggle(
+            biome_id, param_id, checked
         )
 
         group_boxes = FormBuilder.build_biome_fields(
             groups_meta=biome_meta["groups"],
             current_values=current_values,
             on_param_change=on_param_change,
-            on_param_toggle=self.on_param_toggle,
+            on_param_toggle=on_param_toggle,
         )
 
         for box in group_boxes:
@@ -131,14 +151,31 @@ class CalibrationDialog(QDialog):
         self.scroll_area.setWidget(self.dynamic_container)
 
     def _update_param_value(self, biome_id: str, param_id: str, value: float):
-        """Слот: обновляет локальный стейт при прокрутке любого спинбокса"""
-        self._state[biome_id][param_id] = value
+        """Слот: обновляет значение в локальном стейте при прокрутке любого спинбокса"""
+        if param_id in self._state[biome_id]:
+            self._state[biome_id][param_id]["value"] = value
+
+    def _update_param_toggle(self, biome_id: str, param_id: str, is_enabled: bool):
+        """Слот: обновляет статус активности в стейте и пробрасывает событие в контроллер"""
+        if param_id in self._state[biome_id]:
+            self._state[biome_id][param_id]["is_enabled"] = is_enabled
+
+        # Вызываем ваш логгер / логику из контроллера
+        self.on_param_toggle(biome_id, param_id, is_enabled)
 
     def _handle_apply(self):
-        """Кнопка Запустить расчет: сохраняет стейт и запрашивает старт алгоритма через сигнал"""
-        save_coefficients(self._state)
+        """Кнопка Запустить расчет: упаковывает стейт в модель, сохраняет и генерирует сигнал"""
+        # Создаем полноценный объект модели из локального стейта диалога
+        coefs_obj = CalibrationCoefficients(self._state)
+
+        # Сохраняем в JSON на диск и обновляем синглтон
+        save_coefficients(coefs_obj)
+
         should_replace = self.cb_replace_raster.isChecked()
-        self.run_algorithm_requested.emit(self._state, should_replace)
+
+        # Передаем в алгоритм словарь нового формата через .to_dict()
+        # { "400": { "SLOPE_MAX": {"value": 2.0, "is_enabled": True} } }
+        self.run_algorithm_requested.emit(coefs_obj.to_dict(), should_replace)
 
     def set_loading_state(self, is_loading: bool):
         """Управляет доступностью кнопки из контроллера во время вычислений"""

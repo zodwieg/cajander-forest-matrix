@@ -63,16 +63,16 @@ class FormBuilder:
                 elif param_type == "min":
                     icon_active = '<font color="#c0392b">▼</font> '
                 else:
-                    icon_active = "● "
+                    icon_active = '<font color="#2c3e50">●</font> '
 
-                # Серая иконка для выключенного состояния
+                disabled_color = "#d2d7d9"
                 icon_disabled = (
-                    '<font color="#7f8c8d">▼</font> '
+                    f'<font color="{disabled_color}">▼</font> '
                     if param_type == "min"
                     else (
-                        '<font color="#7f8c8d">▲</font> '
+                        f'<font color="{disabled_color}">▲</font> '
                         if param_type == "max"
-                        else '<font color="#7f8c8d">●</font> '
+                        else f'<font color="{disabled_color}">●</font> '
                     )
                 )
 
@@ -140,6 +140,13 @@ class FormBuilder:
                         on_param_toggle(pid, checked)
 
                     return handle_toggle
+
+                if is_active:
+                    label.setText(f"{icon_active}{param['label']}")
+                else:
+                    label.setText(
+                        f"{icon_disabled}<font color='#7f8c8d'>{param['label']}</font>"
+                    )
 
                 # Передаем param["label"] седьмым аргументом при подписке на событие
                 param_checkbox.toggled.connect(

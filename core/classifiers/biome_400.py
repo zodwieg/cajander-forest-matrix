@@ -6,33 +6,40 @@ from ...config.coefficients import get_coefficients
 def classify_biome_400(final_matrix: np.ndarray) -> np.ndarray:
     """Шаг сита №1: Выделение открытых сфагновых болот (Код 400)."""
 
-    # 1. Выделяем маску еще не классифицированных пикселей
-    unclassified = final_matrix == 0
+    # 1. Стартовая маска — только неклассифицированные пиксели
+    biome_400_mask = final_matrix == 0
 
-    # 2. Лениво извлекаем из синглтона ТОЛЬКО те растры, которые нужны здесь.
-    # Если на Шаге 1 до этого биома никто не вызывал 'slope', сервис сейчас прочитает его.
-    slope = get_raster("slope")
-    b04_3 = get_raster("B04_3")
-    ndwi_5 = get_raster("NDWI_5")
-    ndre_7 = get_raster("NDRE_7")
-    twi = get_raster("TWI")
-    ndii_7 = get_raster("NDII_7")
-
-    # 3. Загружаем коэффициенты
+    # 2. Загружаем коэффициенты
     t400 = get_coefficients().biome("400")
 
-    # 4. Строим строгую маску биома 400
-    biome_400_mask = (
-        unclassified
-        & (slope < t400.SLOPE_MAX)
-        & (b04_3 > t400.B043_MIN)
-        & (ndwi_5 > t400.NDWI5_MIN)
-        & (ndre_7 < t400.NDRE_MAX)
-        & (twi > t400.TWI_MIN)
-        & (ndii_7 > t400.NDII_MIN)
-    )
+    # 3. Динамически добавляем условия, только если они включены.
+    # Если параметр выключен, растр даже не запрашивается (get_raster не вызывается).
 
-    # 5. Выжигаем код биома в финальную матрицу
+    # SLOPE_MAX (<)
+    if t400.is_enabled("SLOPE_MAX"):
+        biome_400_mask &= get_raster("slope") < t400.SLOPE_MAX
+
+    # B043_MIN (>)
+    if t400.is_enabled("B043_MIN"):
+        biome_400_mask &= get_raster("B04_3") > t400.B043_MIN
+
+    # NDWI5_MIN (>)
+    if t400.is_enabled("NDWI5_MIN"):
+        biome_400_mask &= get_raster("NDWI_5") > t400.NDWI5_MIN
+
+    # NDRE_MAX (<)
+    if t400.is_enabled("NDRE_MAX"):
+        biome_400_mask &= get_raster("NDRE_7") < t400.NDRE_MAX
+
+    # TWI_MIN (>)
+    if t400.is_enabled("TWI_MIN"):
+        biome_400_mask &= get_raster("TWI") > t400.TWI_MIN
+
+    # NDII_MIN (>)
+    if t400.is_enabled("NDII_MIN"):
+        biome_400_mask &= get_raster("NDII_7") > t400.NDII_MIN
+
+    # 4. Выжигаем код биома в финальную матрицу
     final_matrix[biome_400_mask] = 400
 
     return final_matrix

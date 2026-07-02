@@ -13,6 +13,7 @@ from qgis.core import (
 import os
 from ..ui.calibration_dialog import CalibrationDialog
 from ..config import constants as c
+from ..config.coefficients.coefficients import update_param_state
 
 
 class CalibrationController:
@@ -24,16 +25,15 @@ class CalibrationController:
         self._progress_dialog = None  # Добавим в init для порядка
 
     def show_dialog(self):
-        def handle_param_toggle(param_id: str, is_enabled: bool):
+        def handle_param_toggle(biome_id: str, param_id: str, is_enabled: bool):
             QgsMessageLog.logMessage(
-                f"Параметр {param_id} {'включен' if is_enabled else 'отключен'}",
+                f"Параметр {param_id} для биома {biome_id} {'включен' if is_enabled else 'отключен'}",
                 "Cajander Matrix",
                 Qgis.MessageLevel.Info,
             )
-            # Ваша сложная логика записи в сервис/алгоритм
-            # self.settings_service.set_param_enabled(param_id, is_enabled)
-            # Если нужно, сразу дергаем пересчет
-            # self.refresh_preview()
+
+            # 1. Записываем состояние в модель, обновляем синглтон и сохраняем JSON
+            update_param_state(biome_id, param_id, is_enabled)
 
         if self._dialog is None:
             self._dialog = CalibrationDialog(

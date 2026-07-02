@@ -1,5 +1,5 @@
 import numpy as np
-from .classifiers import classify_biome_400
+from .classifiers import classify_biome_400, classify_biome_411
 
 
 def generate_forest_matrix(base_shape: tuple[int, int]) -> np.ndarray:
@@ -14,6 +14,6 @@ def generate_forest_matrix(base_shape: tuple[int, int]) -> np.ndarray:
     classify_biome_400(final_matrix=final_matrix)
 
     # Шаг 2. Следующий биом (Ему могут понадобиться другие растры, и он возьмет их сам)
-    # classify_biome_500(final_matrix=final_matrix)
+    classify_biome_411(final_matrix=final_matrix)
 
     return final_matrix

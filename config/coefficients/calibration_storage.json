@@ -1,10 +1,54 @@
 {
     "400": {
-        "B043_MIN": 0.3999999999999999,
-        "NDII_MIN": 0.18,
-        "NDRE_MAX": 0.45000000000000007,
-        "NDWI5_MIN": 0.08000000000000002,
-        "SLOPE_MAX": 4.999999999999999,
-        "TWI_MIN": 0.25000000000000006
+        "B043_MIN": {
+            "value": 0.01,
+            "is_enabled": false
+        },
+        "NDII_MIN": {
+            "value": 0.19999999999999998,
+            "is_enabled": true
+        },
+        "NDRE_MAX": {
+            "value": 0.45000000000000007,
+            "is_enabled": true
+        },
+        "NDWI5_MIN": {
+            "value": 0.05,
+            "is_enabled": false
+        },
+        "SLOPE_MAX": {
+            "value": 4.800000000000001,
+            "is_enabled": false
+        },
+        "TWI_MIN": {
+            "value": 0.29999999999999993,
+            "is_enabled": true
+        }
+    },
+    "411": {
+        "B043_MAX": {
+            "value": 0.9,
+            "is_enabled": true
+        },
+        "NDII_MIN": {
+            "value": 0.2,
+            "is_enabled": true
+        },
+        "NDRE_MAX": {
+            "value": 0.6,
+            "is_enabled": true
+        },
+        "NDRE_MIN": {
+            "value": 0.45,
+            "is_enabled": true
+        },
+        "SLOPE_MAX": {
+            "value": 3.0,
+            "is_enabled": true
+        },
+        "TWI_MIN": {
+            "value": 0.3,
+            "is_enabled": true
+        }
     }
 }

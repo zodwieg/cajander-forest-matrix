@@ -1,6 +1,8 @@
+import json
 from dataclasses import dataclass, field
 from ..config import constants as c
-from ..config.coefficients import REGISTRY, save_coefficients
+from ..config.coefficients import save_coefficients
+from ..config.coefficients.coefficients import CalibrationCoefficients
 
 
 @dataclass
@@ -19,29 +21,30 @@ class QgisDataBinder:
         self.algo = algo
 
     def sync_ui_coefficients(self, parameters, context) -> None:
-        """Считывает коэффициенты и сбрасывает их в глобальный синглтон."""
+        """Считывает коэффициенты из параметров алгоритма и сбрасывает их в синглтон."""
+        raw_data = parameters.get("COEFFICIENTS", {})
 
-        # СЦЕНАРИЙ А: Алгоритм запущен из нашего кастомного контроллера калибровки.
-        # Контроллер передал уже готовый собранный стейт в ключе 'COEFFICIENTS'.
-        if "COEFFICIENTS" in parameters:
-            ui_data = parameters["COEFFICIENTS"]
-            save_coefficients(ui_data)
-            return
+        # Защита от QGIS-специфики: десериализация строки в dict, если QGIS превратил его в строку
+        if isinstance(raw_data, str):
+            try:
+                raw_data = json.loads(raw_data)
+            except Exception:
+                raw_data = {}
 
-        # СЦЕНАРИЙ Б: Алгоритм запущен стандартно через нативное окно QGIS Processing.
-        # Собираем данные поштучно из виджетов QGIS.
-        ui_data = {}
-        for biome_id, biome_info in REGISTRY.items():
-            ui_data[biome_id] = {}
-            for group_info in biome_info["groups"].values():
-                for param in group_info["parameters"]:
-                    param_id = param["id"]
-                    qgis_param_key = f"{biome_id}_{param_id}"
+        # Строгий маппинг данных (Data Mapping) перед передачей в доменную модель
+        normalized = {}
+        for biome_id, params in raw_data.items():
+            normalized[biome_id] = {}
+            for pid, pbody in params.items():
+                if isinstance(pbody, dict):
+                    # Новый формат с флагами из диалога калибровки
+                    normalized[biome_id][pid] = pbody
+                else:
+                    # На случай, если проскочило старое плоское число float
+                    normalized[biome_id][pid] = {
+                        "value": float(pbody),
+                        "is_enabled": True,
+                    }
 
-                    val = self.algo.parameterAsDouble(
-                        parameters, qgis_param_key, context
-                    )
-                    ui_data[biome_id][param_id] = val
-
-        # Сохраняем на диск / обновляем синглтон
-        save_coefficients(ui_data)
+        # Вызываем строгое сохранение доменного объекта
+        save_coefficients(CalibrationCoefficients(normalized))
