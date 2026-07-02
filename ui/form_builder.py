@@ -1,8 +1,11 @@
+import os
 from qgis.core import (
     QgsProcessingParameterNumber,
     QgsProcessingParameterRasterDestination,
 )
-from qgis_cajander_matrix.config import coefficients as coef
+
+# Импортируем из фасада папки пакета
+from qgis_cajander_matrix.config.coefficients import REGISTRY, get_coefficients
 from qgis_cajander_matrix.config import constants as c
 
 
@@ -13,40 +16,48 @@ class QgisFormBuilder:
         self.algo = algo
 
     def build_ui(self) -> None:
-        # Загружаем текущие сохраненные коэффициенты как объект
-        current_coeffs = coef.load_coefficients()
+        # Загружаем текущие сохраненные коэффициенты через синглтон
+        current_coeffs = get_coefficients()
 
-        # Автоматически генерируем все числовые поля ввода
-        for item in coef.REGISTRY:
-            param_id = item["id"]
-            # Вытаскиваем значение из объекта по текстовому имени переменной
-            current_value = getattr(current_coeffs, param_id)
+        # Итерируемся по иерархическому реестру
+        for biome_id, biome_info in REGISTRY.items():
+            biome_name = biome_info["name"]
 
-            self.algo.addParameter(
-                QgsProcessingParameterNumber(
-                    param_id,
-                    item["label"],
-                    type=QgsProcessingParameterNumber.Type.Double,
-                    defaultValue=current_value,
-                )
-            )
+            for group_key, group_info in biome_info["groups"].items():
+                for param in group_info["parameters"]:
+                    param_id = param["id"]
+
+                    # Формируем уникальный технический ID для QGIS формы
+                    qgis_param_key = f"{biome_id}_{param_id}"
+
+                    # Красивый читаемый лейбл для ГИС-инженера
+                    display_label = f"[{biome_name}] {param['label']}"
+
+                    # Извлекаем значение через наш строго типизированный метод .biome()
+                    # VSCode здесь уже подсветит автодополнение для "400"
+                    current_value = getattr(current_coeffs.biome(biome_id), param_id)
+
+                    self.algo.addParameter(
+                        QgsProcessingParameterNumber(
+                            qgis_param_key,
+                            display_label,
+                            type=QgsProcessingParameterNumber.Type.Double,
+                            defaultValue=current_value,
+                            # Используем лимиты и шаг из метаданных реестра
+                            minValue=param["min"],
+                            maxValue=param["max"],
+                        )
+                    )
 
         # =========================================================================
         # ВЫХОДНОЙ РАСТР
         # =========================================================================
-        # 1. Сначала создаем объект параметра и сохраняем его в переменную
         output_param = QgsProcessingParameterRasterDestination(
             c.PARAM_OUTPUT_RASTER,
             "forest_matrix",
         )
 
-        # 2. Настраиваем метаданные стиля для созданного объекта
-        import os
-
         qml_path = c.DEFAULT_QML_PATH
-
-        # Используем стандартный ключ для принудительного маппинга QML
         output_param.setMetadata({"PREFER_TEMPLATE": qml_path})
 
-        # 3. И только теперь ОДИН РАЗ регистрируем его в алгоритме
         self.algo.addParameter(output_param)

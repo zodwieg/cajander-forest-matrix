@@ -1,4 +1,6 @@
+# config/orchestrator.py
 import os
+import numpy as np
 from qgis_cajander_matrix.config import constants as c
 from qgis_cajander_matrix.core import (
     read_raster_band,
@@ -45,7 +47,8 @@ class CajanderProcessingOrchestrator:
         _, projection, geotransform = read_raster_band(base_path)
 
         # Читаем все растры в словарь NumPy-массивов
-        loaded_rasters = {}
+        # Явно подсказываем IDE тип словаря для чистоты кода
+        loaded_rasters: dict[str, np.ndarray] = {}
         for key in required_raster_keys:
             logger.pushInfo(f"Чтение слоя: {key}...")
             array, _, _ = read_raster_band(dto.raster_paths[key])
@@ -54,16 +57,8 @@ class CajanderProcessingOrchestrator:
         # Шаг 2: Обработать матрицу
         logger.pushInfo("Шаг 2/3: Классификация 3D-матрицы лесов по Каяндеру...")
 
-        # Логируем калибровочные значения перед расчетом, чтобы в логах QGIS всегда
-        # было видно, с какими именно коэффициентами был запущен этот конкретный расчет.
-        # Так как coeffs — это объект, читать их одно удовольствие:
-        logger.pushInfo(f"Используемый Slope Max: {dto.coefficients.T_400_SLOPE_MAX}")
-        logger.pushInfo(
-            f"Используемый March B04 Min: {dto.coefficients.T_400_B043_MIN}"
-        )
-
-        # Передаем объект коэффициентов вместо старого словаря thresholds
-        result_matrix = generate_forest_matrix(loaded_rasters, dto.coefficients)
+        # Чистый вызов алгоритма расчёта. Оркестратор БОЛЬШЕ НЕ знает про коэффициенты!
+        result_matrix = generate_forest_matrix(loaded_rasters)
 
         # Шаг 3: Сохранить результат
         logger.pushInfo("Шаг 3/3: Экспорт результатов в GeoTIFF...")
