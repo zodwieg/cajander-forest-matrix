@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QWidget,
     QLabel,
+    QCheckBox,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -16,7 +17,7 @@ from ..config.coefficients import REGISTRY, get_coefficients, save_coefficients
 
 
 class CalibrationDialog(QDialog):
-    run_algorithm_requested = pyqtSignal(dict)
+    run_algorithm_requested = pyqtSignal(dict, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -66,6 +67,12 @@ class CalibrationDialog(QDialog):
         self.biome_selector.currentIndexChanged.connect(self._handle_biome_changed)
         top_layout.addWidget(self.biome_selector, stretch=1)
         main_layout.addLayout(top_layout)
+
+        self.cb_replace_raster = QCheckBox(
+            "Заменять предыдущий растр (Replace previous raster)"
+        )
+        self.cb_replace_raster.setChecked(True)  # Включена по умолчанию
+        main_layout.addWidget(self.cb_replace_raster)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -128,9 +135,14 @@ class CalibrationDialog(QDialog):
     def _handle_apply(self):
         """Кнопка Запустить расчет: сохраняет стейт и запрашивает старт алгоритма через сигнал"""
         save_coefficients(self._state)
-        self.run_algorithm_requested.emit(self._state)
+        should_replace = self.cb_replace_raster.isChecked()
+        self.run_algorithm_requested.emit(self._state, should_replace)
 
     def set_loading_state(self, is_loading: bool):
         """Управляет доступностью кнопки из контроллера во время вычислений"""
         self.btn_save.setEnabled(not is_loading)
         self.biome_selector.setEnabled(not is_loading)
+
+    def safe_accept(self):
+        """Потокобезопасный метод для закрытия диалога с успешным кодом."""
+        self.accept()

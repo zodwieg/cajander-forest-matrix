@@ -32,6 +32,7 @@ except Exception as e:
 from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingLayerPostProcessorInterface,
+    QgsProcessingParameterRasterDestination,
     QgsProject,
     QgsRasterLayer,
 )
@@ -52,7 +53,11 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
         self.orchestrator = CajanderProcessingOrchestrator()
 
     def initAlgorithm(self, config=None):
-        self.form_builder.build_ui()
+        self.addParameter(
+            QgsProcessingParameterRasterDestination(
+                c.PARAM_OUTPUT_RASTER, c.PARAM_OUTPUT_RASTER_NAME
+            )
+        )
 
     def processAlgorithm(self, parameters, context, feedback):
         # 1. Синхронизируем коэффициенты (теперь метод сам поймет, откуда их взять — из GUI QGIS или из словаря)
@@ -72,36 +77,6 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
         # Возвращаем словарь с результатом, который Контроллер заберет в главном потоке
         return {c.PARAM_OUTPUT_RASTER: output_path}
 
-    def processAlgorithmOld(self, parameters, context, feedback):
-        # 1. Синхронизируем коэффициенты из UI в синглтон-конфиг
-        self.ui_binder.sync_ui_coefficients(parameters, context)
-
-        # 2. Получаем выходной путь напрямую из параметров QGIS
-        output_path = self.parameterAsOutputLayer(
-            parameters, c.PARAM_OUTPUT_RASTER, context
-        )
-
-        # 3. Запуск расчетов оркестратором (передаем только путь и логгер)
-        self.orchestrator.run(output_path, feedback)
-
-        # =========================================================================
-        # ХИТРЫЙ ХАК: САМИ ЗАГРУЖАЕМ И КРАСИМ СЛОЙ
-        # =========================================================================
-        if feedback:
-            feedback.pushInfo("Принудительно загружаем растр и накатываем QML...")
-
-        layer_name = "forest_matrix"
-        final_layer = QgsRasterLayer(output_path, layer_name)
-
-        if final_layer.isValid():
-            final_layer.loadNamedStyle(c.DEFAULT_QML_PATH)
-            QgsProject.instance().addMapLayer(final_layer)
-
-        if feedback:
-            feedback.pushInfo("Алгоритм успешно завершен.")
-
-        return {c.PARAM_OUTPUT_RASTER: output_path}
-
     def name(self):
         return c.ALGO_NAME
 
@@ -116,3 +91,7 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
 
     def createInstance(self):
         return CajanderMatrixAlgorithm()
+
+    def createCustomParametersWidget(self, parent):
+        # Возвращаем None, чтобы QGIS не пытался строить дефолтный UI внутри себя
+        return None

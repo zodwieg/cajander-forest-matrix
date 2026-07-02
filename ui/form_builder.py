@@ -54,7 +54,7 @@ class QgisFormBuilder:
         # =========================================================================
         output_param = QgsProcessingParameterRasterDestination(
             c.PARAM_OUTPUT_RASTER,
-            "forest_matrix",
+            c.PARAM_OUTPUT_RASTER_NAME,
         )
 
         qml_path = c.DEFAULT_QML_PATH
