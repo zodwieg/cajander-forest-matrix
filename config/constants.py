@@ -18,6 +18,7 @@ PARAM_NDII_7 = "NDII_7"
 PARAM_OUTPUT_RASTER = "OUTPUT_RASTER"
 
 # Метаданные алгоритма
+PROVIDER_NAME = "cajander_provider"
 ALGO_NAME = "cajander_forest_matrix"
 ALGO_DISPLAY_NAME = "Генерация матрицы типов лесов (Каяндер)"
 ALGO_GROUP = "Лесное хозяйство"

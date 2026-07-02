@@ -1,6 +1,6 @@
 {
-    "T_400_SLOPE_MAX": 4.0,
-    "T_400_B043_MIN": 0.8,
-    "T_400_NDWI5_MIN": 0.4,
-    "T_400_NDRE_MAX": 0.3
+    "T_400_SLOPE_MAX": 5.0,
+    "T_400_B043_MIN": 0.5,
+    "T_400_NDWI5_MIN": 0.1,
+    "T_400_NDRE_MAX": 0.5
 }

@@ -2,9 +2,12 @@ import os
 import sys
 
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
-
-# 2. Поднимаемся на один уровень вверх (C:\Users\zdwia\source\local)
+# PARENT_DIR — это папка, В КОТОРОЙ ЛЕЖИТ qgis_cajander_matrix (например, c:\projects)
 PARENT_DIR = os.path.dirname(CURRENT_DIR)
+
+# Рестрим пути для Python: говорим ему смотреть на шаг выше пакета
+if PARENT_DIR not in sys.path:
+    sys.path.insert(0, PARENT_DIR)
 
 # 2. Безопасно импортируем ваш утилитарный модуль
 try:
