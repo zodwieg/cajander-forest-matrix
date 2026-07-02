@@ -43,9 +43,7 @@ class QgisFormBuilder:
         # 2. Настраиваем метаданные стиля для созданного объекта
         import os
 
-        qml_path = os.path.join(
-            r"C:\Users\zdwia\source\local\qgis_cajander_matrix", "cajander_style.qml"
-        )
+        qml_path = c.DEFAULT_QML_PATH
 
         # Используем стандартный ключ для принудительного маппинга QML
         output_param.setMetadata({"PREFER_TEMPLATE": qml_path})

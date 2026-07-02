@@ -1,7 +1,9 @@
+import os
 import sys
+from qgis_cajander_matrix.config import constants as c
 
 # 1. Поднимаемся на один уровень выше, чтобы qgis_cajander_matrix стал видимым пакетом
-PARENT_DIR = r"C:\Users\zdwia\source\local"
+PARENT_DIR = os.path.dirname(c.PROJECT_ROOT)
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
@@ -32,7 +34,7 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant
 
 # 4. СТРОГИЕ АБСОЛЮТНЫЕ ИМПОРТЫ (Аналог using в C# с указанием полного namespace)
-from qgis_cajander_matrix.config import constants as c
+
 from qgis_cajander_matrix.ui import QgisFormBuilder, QgisDataBinder
 from qgis_cajander_matrix.core.io_handler import QgisProjectReader
 from qgis_cajander_matrix.services import CajanderProcessingOrchestrator
@@ -57,9 +59,7 @@ class CajanderRasterStyler(QgsProcessingLayerPostProcessorInterface):
         #
         import os
 
-        qml_path = os.path.join(
-            r"C:\Users\zdwia\source\local\qgis_cajander_matrix", "cajander_style.qml"
-        )
+        qml_path = c.DEFAULT_QML_PATH
         error_msg = ""
         success, error_msg = layer.loadNamedStyle(qml_path)
         if not success and feedback:
@@ -111,10 +111,7 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
 
         if final_layer.isValid():
             # Накатываем ваш сохраненный QML файл с адаптивной палитрой
-            qml_path = os.path.join(
-                r"C:\Users\zdwia\source\local\qgis_cajander_matrix",
-                "cajander_style.qml",
-            )
+            qml_path = c.DEFAULT_QML_PATH
             final_layer.loadNamedStyle(qml_path)
 
             # Добавляем растр напрямую в текущий проект QGIS

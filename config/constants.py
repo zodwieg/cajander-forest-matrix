@@ -1,3 +1,8 @@
+import os
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+DEFAULT_QML_PATH = os.path.join(PROJECT_ROOT, "cajander_style.qml")
+
 # ID параметров растров для QGIS (Остаются без изменений)
 PARAM_DEM = "DEM"
 PARAM_SLOPE = "slope"
