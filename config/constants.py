@@ -16,6 +16,7 @@ PARAM_NDRE_7 = "NDRE_7"
 PARAM_NDII_7 = "NDII_7"
 
 PARAM_OUTPUT_RASTER = "OUTPUT_RASTER"
+PARAM_OUTPUT_RASTER_NAME = "forest_matrix"
 
 # Метаданные алгоритма
 PROVIDER_NAME = "cajander_provider"

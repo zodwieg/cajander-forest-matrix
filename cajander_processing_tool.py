@@ -32,47 +32,15 @@ except Exception as e:
 from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingLayerPostProcessorInterface,
+    QgsProject,
+    QgsRasterLayer,
 )
 from qgis.PyQt.QtCore import QVariant
 
 # 4. СТРОГИЕ АБСОЛЮТНЫЕ ИМПОРТЫ (Аналог using в C# с указанием полного namespace)
-from qgis_cajander_matrix.config import constants as c
-from qgis_cajander_matrix.ui import QgisFormBuilder, QgisDataBinder
-from qgis_cajander_matrix.core.io_handler import QgisProjectReader
-from qgis_cajander_matrix.services import CajanderProcessingOrchestrator
-
-
-class CajanderRasterStyler(QgsProcessingLayerPostProcessorInterface):
-    """Постпроцессор, который принудительно красит растр ПОСЛЕ его полной загрузки."""
-
-    def postProcessLayer(self, layer, context, feedback):
-        if not layer or not layer.isValid():
-            return
-
-        if feedback:
-            feedback.pushInfo("Применяем стиль Каяндера к растру...")
-
-        # ВАРИАНТ А: Через код (с обновленными лимитами min/max)
-
-        # ---------------------------------------------------------------------
-        # ВАРИАНТ Б (АЛЬТЕРНАТИВНЫЙ): Автоматическое применение готового QML-файла
-        # Если Вариант А снова выдаст ч/б, просто раскомментируйте строки ниже,
-        # предварительно сохранив правильный стиль из интерфейса QGIS в файл .qml
-        #
-        import os
-
-        qml_path = c.DEFAULT_QML_PATH
-        error_msg = ""
-        success, error_msg = layer.loadNamedStyle(qml_path)
-        if not success and feedback:
-            feedback.pushDebugInfo(f"Ошибка загрузки QML: {error_msg}")
-        # ---------------------------------------------------------------------
-
-        # Принудительно обновляем кэш и заставляем QGIS перерисовать легенду в панели
-        layer.triggerRepaint()
-        from qgis.core import QgsProject
-
-        QgsProject.instance().layerTreeRoot().findLayer(layer.id()).refresh()
+from .config import constants as c
+from .ui import QgisFormBuilder, QgisDataBinder
+from .services import CajanderProcessingOrchestrator
 
 
 class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
@@ -87,45 +55,52 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
         self.form_builder.build_ui()
 
     def processAlgorithm(self, parameters, context, feedback):
-        # 1. Готовим ридер проекта и собираем DTO
-        reader = QgisProjectReader(feedback)
-        dto = self.ui_binder.create_dto_from_parameters(parameters, context, reader)
+        # 1. Синхронизируем коэффициенты (теперь метод сам поймет, откуда их взять — из GUI QGIS или из словаря)
+        self.ui_binder.sync_ui_coefficients(parameters, context)
 
-        # 2. Запуск ваших расчетов
-        self.orchestrator.run(dto, feedback)
-
-        # =========================================================================
-        # ХИТРЫЙ ХАК: САМИ ЗАГРУЖАЕМ И КРАСИМ СЛОЙ, МИНУЯ БАГИ СИСТЕМЫ СТИЛЕЙ
-        # =========================================================================
-        import os
-        from qgis.core import (
-            QgsRasterLayer,
-            QgsProject,
+        # 2. Получаем выходной путь напрямую из параметров QGIS
+        output_path = self.parameterAsOutputLayer(
+            parameters, c.PARAM_OUTPUT_RASTER, context
         )
-        from qgis.PyQt.QtGui import QColor
 
+        # 3. Запуск расчетов оркестратором (чистая бизнес-логика в фоне)
+        if feedback:
+            feedback.pushInfo("Старт фонового расчета матрицы...")
+
+        self.orchestrator.run(output_path, feedback)
+
+        # Возвращаем словарь с результатом, который Контроллер заберет в главном потоке
+        return {c.PARAM_OUTPUT_RASTER: output_path}
+
+    def processAlgorithmOld(self, parameters, context, feedback):
+        # 1. Синхронизируем коэффициенты из UI в синглтон-конфиг
+        self.ui_binder.sync_ui_coefficients(parameters, context)
+
+        # 2. Получаем выходной путь напрямую из параметров QGIS
+        output_path = self.parameterAsOutputLayer(
+            parameters, c.PARAM_OUTPUT_RASTER, context
+        )
+
+        # 3. Запуск расчетов оркестратором (передаем только путь и логгер)
+        self.orchestrator.run(output_path, feedback)
+
+        # =========================================================================
+        # ХИТРЫЙ ХАК: САМИ ЗАГРУЖАЕМ И КРАСИМ СЛОЙ
+        # =========================================================================
         if feedback:
             feedback.pushInfo("Принудительно загружаем растр и накатываем QML...")
 
-        # Создаем полноценный слой напрямую из созданного файла
         layer_name = "forest_matrix"
-        final_layer = QgsRasterLayer(dto.output_path, layer_name)
+        final_layer = QgsRasterLayer(output_path, layer_name)
 
         if final_layer.isValid():
-            # Накатываем ваш сохраненный QML файл с адаптивной палитрой
-            qml_path = c.DEFAULT_QML_PATH
-            final_layer.loadNamedStyle(qml_path)
-
-            # Добавляем растр напрямую в текущий проект QGIS
+            final_layer.loadNamedStyle(c.DEFAULT_QML_PATH)
             QgsProject.instance().addMapLayer(final_layer)
 
         if feedback:
-            feedback.pushInfo(
-                "Алгоритм успешно завершен, передаем управление интерфейсу."
-            )
+            feedback.pushInfo("Алгоритм успешно завершен.")
 
-        # Возвращаем пустой словарь, совместимый с C++ QVariantMap
-        return dict()
+        return {c.PARAM_OUTPUT_RASTER: output_path}
 
     def name(self):
         return c.ALGO_NAME

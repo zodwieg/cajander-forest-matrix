@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from qgis_cajander_matrix.config import constants as c
-from qgis_cajander_matrix.config.coefficients import REGISTRY, save_coefficients
+from ..config import constants as c
+from ..config.coefficients import REGISTRY, save_coefficients
 
 
 @dataclass
@@ -12,21 +12,24 @@ class CajanderJobDto:
     raster_paths: dict[str, str] = field(default_factory=dict)
 
 
-# data_binder.py
-from qgis_cajander_matrix.config import constants as c
-from qgis_cajander_matrix.config.coefficients import REGISTRY, save_coefficients
-
-
 class QgisDataBinder:
-    """Сервис, который извлекает данные из GUI QGIS и превращает их в DTO."""
+    """Сервис, который извлекает данные и сохраняет их в конфигурацию."""
 
     def __init__(self, algo):
         self.algo = algo
 
-    def create_dto_from_parameters(self, parameters, context, reader) -> CajanderJobDto:
-        """Собирает DTO и сбрасывает настройки из UI в глобальный синглтон."""
+    def sync_ui_coefficients(self, parameters, context) -> None:
+        """Считывает коэффициенты и сбрасывает их в глобальный синглтон."""
 
-        # 1. Собираем то, что пользователь накрутил в интерфейсе QGIS
+        # СЦЕНАРИЙ А: Алгоритм запущен из нашего кастомного контроллера калибровки.
+        # Контроллер передал уже готовый собранный стейт в ключе 'COEFFICIENTS'.
+        if "COEFFICIENTS" in parameters:
+            ui_data = parameters["COEFFICIENTS"]
+            save_coefficients(ui_data)
+            return
+
+        # СЦЕНАРИЙ Б: Алгоритм запущен стандартно через нативное окно QGIS Processing.
+        # Собираем данные поштучно из виджетов QGIS.
         ui_data = {}
         for biome_id, biome_info in REGISTRY.items():
             ui_data[biome_id] = {}
@@ -40,15 +43,5 @@ class QgisDataBinder:
                     )
                     ui_data[biome_id][param_id] = val
 
-        # 2. Сохраняем на диск. Это автоматически инвалидирует кэш в get_coefficients()!
+        # Сохраняем на диск / обновляем синглтон
         save_coefficients(ui_data)
-
-        # 3. Собираем чистый DTO (без коэффициентов)
-        dto = CajanderJobDto()
-        dto.raster_paths = reader.get_layer_paths()
-        dto.input_file_path = dto.raster_paths.get(c.PARAM_NDVI_7, "")
-        dto.output_path = self.algo.parameterAsOutputLayer(
-            parameters, c.PARAM_OUTPUT_RASTER, context
-        )
-
-        return dto

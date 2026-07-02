@@ -5,8 +5,8 @@ from qgis.core import (
 )
 
 # Импортируем из фасада папки пакета
-from qgis_cajander_matrix.config.coefficients import REGISTRY, get_coefficients
-from qgis_cajander_matrix.config import constants as c
+from ..config.coefficients import REGISTRY, get_coefficients
+from ..config import constants as c
 
 
 class QgisFormBuilder:
