@@ -1,4 +1,7 @@
 import os
+from typing import Dict
+
+from .preprocessing.recipes import GroupLiteral
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 DEFAULT_QML_PATH = os.path.join(PROJECT_ROOT, "cajander_style.qml")
@@ -41,3 +44,10 @@ REQUIRED_INPUTS = (
     ("ndre_july", "NDRE (Июль)"),
     ("ndii_july", "NDII (Июль)"),
 )
+
+GROUP_COLORS: Dict[GroupLiteral, str] = {
+    "vegetation": "rgba(46, 139, 87, 0.08)",  # Мягкий травянисто-зеленый
+    "moisture": "rgba(30, 144, 255, 0.08)",  # Мягкий небесно-синий
+    "terrain": "rgba(139, 69, 19, 0.07)",  # Мягкий глиняно-коричневый
+    "base_channels": "rgba(112, 128, 144, 0.08)",  # Мягкий стальной/серый для сырых данных
+}
