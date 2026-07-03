@@ -1,3 +1,4 @@
+# main.py
 import os
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
@@ -6,8 +7,8 @@ from qgis.core import QgsApplication, QgsProcessingProvider
 from .cajander_processing_tool import CajanderMatrixAlgorithm
 from .config import constants as c
 
-# Импортируем наш новый контроллер вместо диалога напрямую
-from .controllers.calibration_controller import CalibrationController
+# ИМПОРТ: Теперь импортируем только один главный UI-оркестратор
+from .controllers.main_ui_controller import MainUIController
 
 
 class CajanderMatrixProvider(QgsProcessingProvider):
@@ -35,8 +36,8 @@ class CajanderPlugin:
         self.provider = None
         self.action = None
 
-        # Ссылка на контроллер калибровки (Lazy Load внутри)
-        self.calibration_controller = None
+        # Единственная точка входа для всего UI (Ленивая загрузка)
+        self.main_ui_controller = None
         self.plugin_dir = os.path.dirname(__file__)
 
     def initGui(self):
@@ -57,7 +58,7 @@ class CajanderPlugin:
             icon, "Калибровка алгоритма биомов...", self.iface.mainWindow()
         )
 
-        # Изменяем привязку: теперь клик вызывает метод инициализации контроллера
+        # Клик вызывает метод запуска главного UI-оркестратора
         self.action.triggered.connect(self.run_calibration)
 
         # Добавляем в интерфейс QGIS
@@ -73,8 +74,9 @@ class CajanderPlugin:
             QgsApplication.processingRegistry().removeProvider(self.provider)
 
     def run_calibration(self):
-        """Инициализирует контроллер и передает ему управление."""
-        if self.calibration_controller is None:
-            self.calibration_controller = CalibrationController(self.iface)
+        """Инициализирует главный контроллер интерфейса и передает ему управление."""
+        if self.main_ui_controller is None:
+            self.main_ui_controller = MainUIController(self.iface)
 
-        self.calibration_controller.show_dialog()
+        # Он сам создаст диалог, вложенные вкладки и дочерние контроллеры
+        self.main_ui_controller.show_dialog()

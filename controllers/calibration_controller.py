@@ -1,4 +1,4 @@
-from PyQt5.QtCore import Qt, QMetaObject
+from PyQt5.QtCore import Qt, QMetaObject, QTimer
 from PyQt5.QtWidgets import QProgressDialog
 from qgis.core import (
     QgsApplication,
@@ -11,7 +11,7 @@ from qgis.core import (
     Qgis,
 )
 import os
-from ..ui.calibration_dialog import CalibrationDialog
+from ..ui.main_dialog import MainBiomeDialog
 from ..config import constants as c
 from ..config.coefficients.coefficients import update_param_state
 
@@ -31,16 +31,26 @@ class CalibrationController:
                 "Cajander Matrix",
                 Qgis.MessageLevel.Info,
             )
-
             # 1. Записываем состояние в модель, обновляем синглтон и сохраняем JSON
             update_param_state(biome_id, param_id, is_enabled)
 
         if self._dialog is None:
-            self._dialog = CalibrationDialog(
+            # Создаем новый "SPA" диалог со вкладками
+            self._dialog = MainBiomeDialog(
                 parent=self.iface.mainWindow(), on_param_toggle=handle_param_toggle
             )
-            self._dialog.run_algorithm_requested.connect(self._execute_algorithm)
+
+            # Слот 1 (Вкладка 1): Запуск классификации биомов (старая логика)
+            self._dialog.run_classification_requested.connect(self._execute_algorithm)
+
+            # Слот 2 (Вкладка 2): Новый обработчик для расчета индексов
+            self._dialog.run_preprocessing_requested.connect(
+                self._execute_preprocessing
+            )
+
+            # Стандартный хук очистки при закрытии
             self._dialog.finished.connect(self._cleanup_dialog)
+
         self._dialog.show()
         self._dialog.raise_()
         self._dialog.activateWindow()

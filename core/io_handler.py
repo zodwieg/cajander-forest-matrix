@@ -19,7 +19,10 @@ def read_raster_band(
     band = dataset.GetRasterBand(band_num)
     array = band.ReadAsArray()
 
-    del dataset
+    # ИСПРАВЛЕНИЕ: Сначала уничтожаем ссылку на банд, затем на сам датасет
+    band = None
+    dataset = None
+
     return array, projection, geotransform
 
 
@@ -42,5 +45,11 @@ def write_geotiff(
     out_band.WriteArray(data_array)
     out_band.SetNoDataValue(NODATA_VALUE)
 
+    # ИСПРАВЛЕНИЕ: Сбрасываем кэш всего датасета, а не только отдельного банда
     out_band.FlushCache()
-    del out_dataset
+    out_dataset.FlushCache()
+
+    # КРИТИЧЕСКИ ВАЖНО ДЛЯ WINDOWS:
+    # Сначала обнуляем дочерний банд, затем закрываем родительский датасет
+    out_band = None
+    out_dataset = None

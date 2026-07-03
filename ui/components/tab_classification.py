@@ -1,76 +1,58 @@
+# ui/tab_classification.py
 from PyQt5.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QComboBox,
-    QPushButton,
-    QScrollArea,
-    QWidget,
     QLabel,
+    QComboBox,
     QCheckBox,
+    QScrollArea,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt
 from qgis.core import QgsSettings
 
-# Импортируем наши модули ядра UI
-from .core.form_builder import FormBuilder
-from ..config.coefficients import (
-    REGISTRY,
-    get_coefficients,
-    save_coefficients,
-)
-from ..config.coefficients.models import CalibrationCoefficients
+from ..core.form_builder import FormBuilder
+from ...config.coefficients import REGISTRY, get_coefficients
 
 
-class CalibrationDialog(QDialog):
-    run_algorithm_requested = pyqtSignal(dict, bool)
+class ClassificationTab(QWidget):
+    """
+    Бывший CalibrationDialog. Теперь это просто виджет-вкладка внутри общего диалога.
+    """
 
     def __init__(self, parent, on_param_toggle):
         super().__init__(parent)
         self.on_param_toggle = on_param_toggle
-        self.setWindowTitle("Калибровка алгоритма биомов (MVP)")
-        self.resize(500, 600)
         self._state = {}
         self._load_current_state()
         self._init_ui()
         self._handle_biome_changed()
 
     def _load_current_state(self):
-        """
-        Загружает ТЕКУЩИЕ сохраненные коэффициенты из синглтона в локальный State.
-        Теперь стейт хранит и значения, и флаги активности параметров.
-        """
+        # ... Твой оригинальный код метода _load_current_state без изменений ...
         coeffs = get_coefficients()
-
         for biome_id, biome_meta in REGISTRY.items():
             self._state[biome_id] = {}
             biome_coeffs = coeffs.biome(biome_id)
-
             for group_id, group in biome_meta["groups"].items():
                 for param in group["parameters"]:
                     param_id = param["id"]
-
-                    # Извлекаем float-значение (через __getattr__) и статус из модели
                     current_value = getattr(biome_coeffs, param_id, param["default"])
                     is_enabled = (
                         biome_coeffs.is_enabled(param_id)
                         if hasattr(biome_coeffs, "is_enabled")
                         else True
                     )
-
-                    # Сохраняем в стейт структурировано
                     self._state[biome_id][param_id] = {
                         "value": current_value,
                         "is_enabled": is_enabled,
                     }
 
     def _init_ui(self):
-        """Создает статичный каркас окна"""
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(15)
-        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Сверху: Селектор биомов
         top_layout = QHBoxLayout()
         top_layout.addWidget(QLabel("Выберите биом:"))
 
@@ -84,7 +66,6 @@ class CalibrationDialog(QDialog):
             "qgis_cajander_matrix/last_biome", default_biome
         )
 
-        # Ищем, на какой позиции в комбобоксе находится наш сохраненный ID
         saved_index = self.biome_selector.findData(saved_biome_id)
         if saved_index != -1:
             self.biome_selector.setCurrentIndex(saved_index)
@@ -106,25 +87,13 @@ class CalibrationDialog(QDialog):
 
         self.dynamic_container = None
 
-        buttons_layout = QHBoxLayout()
-        btn_cancel = QPushButton("Отмена")
-        btn_cancel.clicked.connect(self.reject)
-
-        self.btn_save = QPushButton("Рассчитать")
-        self.btn_save.clicked.connect(self._handle_apply)
-        self.btn_save.setDefault(True)
-
-        buttons_layout.addStretch()
-        buttons_layout.addWidget(self.btn_save)
-        buttons_layout.addWidget(btn_cancel)
-        main_layout.addLayout(buttons_layout)
+        # Кнопки "Рассчитать" и "Отмена" отсюда УДАЛЕНЫ. Они ушли в основное окно.
 
     def _handle_biome_changed(self):
-        """Реактивный хук: очищает экран и просит FormBuilder нарисовать новые поля"""
+        # ... Твой оригинальный код метода _handle_biome_changed без изменений ...
         biome_id = self.biome_selector.currentData()
         if not biome_id:
             return
-
         QgsSettings().setValue("qgis_cajander_matrix/last_biome", biome_id)
 
         if self.dynamic_container is not None:
@@ -137,7 +106,6 @@ class CalibrationDialog(QDialog):
         dynamic_layout.setSpacing(10)
 
         biome_meta = REGISTRY[biome_id]
-
         current_values = {}
         for pid, pdata in self._state[biome_id].items():
             current_values[pid] = pdata["value"]
@@ -146,7 +114,6 @@ class CalibrationDialog(QDialog):
         on_param_change = lambda param_id, value: self._update_param_value(
             biome_id, param_id, value
         )
-
         on_param_toggle = lambda param_id, checked: self._update_param_toggle(
             biome_id, param_id, checked
         )
@@ -157,7 +124,6 @@ class CalibrationDialog(QDialog):
             on_param_change=on_param_change,
             on_param_toggle=on_param_toggle,
         )
-
         for box in group_boxes:
             dynamic_layout.addWidget(box)
 
@@ -165,37 +131,17 @@ class CalibrationDialog(QDialog):
         self.scroll_area.setWidget(self.dynamic_container)
 
     def _update_param_value(self, biome_id: str, param_id: str, value: float):
-        """Слот: обновляет значение в локальном стейте при прокрутке любого спинбокса"""
         if param_id in self._state[biome_id]:
             self._state[biome_id][param_id]["value"] = value
 
     def _update_param_toggle(self, biome_id: str, param_id: str, is_enabled: bool):
-        """Слот: обновляет статус активности в стейте и пробрасывает событие в контроллер"""
         if param_id in self._state[biome_id]:
             self._state[biome_id][param_id]["is_enabled"] = is_enabled
-
-        # Вызываем ваш логгер / логику из контроллера
         self.on_param_toggle(biome_id, param_id, is_enabled)
 
-    def _handle_apply(self):
-        """Кнопка Запустить расчет: упаковывает стейт в модель, сохраняет и генерирует сигнал"""
-        # Создаем полноценный объект модели из локального стейта диалога
-        coefs_obj = CalibrationCoefficients(self._state)
+    def get_current_state(self):
+        """Публичный метод, чтобы главное окно могло забрать состояние для сохранения"""
+        return self._state
 
-        # Сохраняем в JSON на диск и обновляем синглтон
-        save_coefficients(coefs_obj)
-
-        should_replace = self.cb_replace_raster.isChecked()
-
-        # Передаем в алгоритм словарь нового формата через .to_dict()
-        # { "400": { "SLOPE_MAX": {"value": 2.0, "is_enabled": True} } }
-        self.run_algorithm_requested.emit(coefs_obj.to_dict(), should_replace)
-
-    def set_loading_state(self, is_loading: bool):
-        """Управляет доступностью кнопки из контроллера во время вычислений"""
-        self.btn_save.setEnabled(not is_loading)
-        self.biome_selector.setEnabled(not is_loading)
-
-    def safe_accept(self):
-        """Потокобезопасный метод для закрытия диалога с успешным кодом."""
-        self.accept()
+    def is_replace_raster_checked(self) -> bool:
+        return self.cb_replace_raster.isChecked()
