@@ -1,47 +1,37 @@
-# controllers/main_ui_controller.py
 import os
-import time
-from PyQt5.QtCore import Qt, QMetaObject
-from PyQt5.QtWidgets import QProgressDialog
+
 from qgis.core import (
     QgsApplication,
     QgsProcessingContext,
-    QgsProcessingFeedback,
-    QgsProcessingAlgRunnerTask,
     Qgis,
+    QgsTask,
 )
-
-from osgeo import gdal
 
 from ..ui.main_dialog import MainBiomeDialog
 from .preprocessing_ui import PreprocessingUIController
 from .classification_ui import ClassificationUIController
-from ..services.raster_layer_manager import RasterLayerManager  # Наш новый сервис
+from ..services.raster_layer_manager import RasterLayerManager
+from ..services.progress_handler import create_processing_progress  # <-- Наш хелпер
 from ..config import constants as c
+from .controller_log_bridge import ControllerLogBridge
 
 
 class MainUIController:
-    """
-    Главный оркестратор UI-процессов плагина.
-    Координирует работу дочерних контроллеров и запускает ГИС-алгоритмы в фоновых потоках QGIS.
-    """
-
     def __init__(self, iface):
         self.iface = iface
         self._dialog = None
         self.preprocessing_ctrl = None
         self.classification_ctrl = None
 
-        # Внедряем ГИС-сервис как зависимость (Dependency Injection)
         self.layer_manager = RasterLayerManager(self.iface)
 
-        # Инфраструктурные переменные для таск-менеджера QGIS
+        # Инфраструктурные переменные
         self._current_context = None
         self._current_feedback = None
         self._progress_dialog = None
 
     def show_dialog(self):
-        """Инициализация главного окна диалога и дочерних UI-контроллеров"""
+        """Инициализация главного окна диалога (без изменений)"""
         if self._dialog is None:
             self._dialog = MainBiomeDialog(
                 parent=self.iface.mainWindow(),
@@ -55,7 +45,9 @@ class MainUIController:
                 execute_algorithm_callback=self._execute_algorithm,
             )
             self.preprocessing_ctrl = PreprocessingUIController(
-                view=self._dialog.tab_preprocessing, iface=self.iface
+                view=self._dialog.tab_preprocessing,
+                iface=self.iface,
+                layer_manager=self.layer_manager,
             )
             self._dialog.finished.connect(self._cleanup_dialog)
 
@@ -64,153 +56,157 @@ class MainUIController:
         self._dialog.activateWindow()
 
     def _execute_algorithm(self, coefficients_state: dict, should_replace: bool):
-        """Инфраструктурный метод запуска QgsProcessingAlgorithm в QgsTask."""
+        """Оркестратор запуска QgsProcessingAlgorithm в фоновом режиме."""
+        # 1. Валидация алгоритма
         algorithm_id = f"{c.PROVIDER_NAME}:{c.ALGO_NAME}"
         algorithm = QgsApplication.processingRegistry().createAlgorithmById(
             algorithm_id
         )
-
         if not algorithm:
-            self.iface.messageBar().pushMessage(
+            self._show_message(
                 "Ошибка",
                 f"Не удалось найти алгоритм {algorithm_id}.",
+                Qgis.MessageLevel.Critical,
+            )
+            return
+
+        # 2. Подготовка файловой системы
+        output_path = self.layer_manager.generate_output_path(should_replace)
+        if should_replace and not self.layer_manager.release_and_delete_source(
+            output_path
+        ):
+            self._show_message(
+                "Файл заблокирован",
+                "Не удалось перезаписать растр. Удалите слой вручную и повторите расчет.",
                 level=Qgis.MessageLevel.Critical,
             )
             return
 
-        # Делегируем сервису подготовку путей к файлам и зачистку старого слоя
-        fixed_temp_output = self.layer_manager.generate_output_path(should_replace)
-        existing_layer = (
-            self.layer_manager.find_layer_by_source(fixed_temp_output)
-            if should_replace
-            else None
-        )
+        # 3. Инициализация UI-прогресса и контекста
+        self._current_context = QgsProcessingContext()
 
-        if should_replace:
-            # 1. Сначала ищем и удаляем слой через исправленный менеджер
-            existing_layer = self.layer_manager.find_layer_by_source(fixed_temp_output)
-            if existing_layer:
-                self.layer_manager.release_layer_source(existing_layer)
+        # ИСПРАВЛЕНИЕ: Вместо голого QgsProcessingFeedback создаем наш класс-мост,
+        # передавая ему ссылку на вашу вкладку логов
+        self._current_feedback = ControllerLogBridge(self._dialog.tab_log)
 
-            # 2. ЖЕСТКИЙ ПРЕДОХРАНИТЕЛЬ: Пробуем физически удалить файл с диска в главном потоке.
-            if os.path.exists(fixed_temp_output):
-                try:
-                    os.remove(fixed_temp_output)
-                except OSError:
-                    # Если Windows не дает удалить сразу, даем QGIS шанс доуничтожать объекты в памяти
-                    for _ in range(3):  # Делаем до 3 коротких попыток с микропаузами
-                        QgsApplication.processEvents()
-                        time.sleep(0.1)
-                        try:
-                            os.remove(fixed_temp_output)
-                            break  # Если удалилось успешно — выходим из цикла попыток
-                        except OSError:
-                            continue
-                    else:
-                        self.iface.messageBar().pushMessage(
-                            "Файл заблокирован",
-                            "Не удалось перезаписать растр. Удалите слой вручную и повторите расчет.",
-                            level=Qgis.Critical,  # В QGIS 3 обычно используется Qgis.Critical или Qgis.MessageLevel.Critical
-                            duration=5,
-                        )
-                        return
-
-        # Конструируем параметры для Processing-движка
+        # 4. Формирование параметров
         params = {
             "COEFFICIENTS": coefficients_state,
-            c.PARAM_OUTPUT_RASTER: fixed_temp_output,
+            c.PARAM_OUTPUT_RASTER: output_path,
         }
 
-        # Настраиваем контекст, фидбек и диалог прогресс-бара QGIS
-        self._current_context = QgsProcessingContext()
-        self._current_feedback = QgsProcessingFeedback()
-        self._progress_dialog = QProgressDialog(
-            "Выполняется калибровка алгоритма биомов...", "Отмена", 0, 0, self._dialog
-        )
-        self._progress_dialog.setWindowTitle("Расчет")
-        self._progress_dialog.setWindowModality(Qt.ApplicationModal)
-
-        self._current_feedback.progressChanged.connect(
-            lambda progress: (
-                self._progress_dialog.setValue(int(progress)) if progress > 0 else None
-            )
-        )
-        self._progress_dialog.canceled.connect(self._current_feedback.cancel)
-
-        # Переводим SPA-диалог во временный Loading state
+        # Переводим диалог в состояние загрузки (блокирует поля, переключает на вкладку лога)
         self._dialog.set_loading_state(True)
 
-        # Создаем нативный фоновый таск QGIS
-        task = QgsProcessingAlgRunnerTask(
-            algorithm, params, self._current_context, self._current_feedback
+        # Передаем управление фабрике создания чистой задачи
+        task = self._create_runner_task(algorithm, params, should_replace)
+
+        # Отмена задачи связывается стандартным способом
+        task.taskTerminated.connect(self._current_feedback.cancel)
+
+        QgsApplication.taskManager().addTask(task)
+
+    def _create_runner_task(
+        self, algorithm, params: dict, should_replace: bool
+    ) -> QgsTask:
+        """Фабричный метод для сборки универсального QgsTask на базе алгоритма."""
+
+        # Сохраняем ссылки на контекст и фидбек в локальные переменные для замыкания
+        context = self._current_context
+        feedback = self._current_feedback
+
+        # 1. Описываем изолированную функцию, которая выполнится строго в фоне
+        def run_processing_in_background(task_instance):
+            # Внутри потока используем метод .run()
+            # Он вернет кортеж (results_dict, success_bool)
+            results, success = algorithm.run(params, context, feedback)
+            return {"results": results, "success": success}
+
+        # 2. Создаем стандартный QgsTask из функции
+        task = QgsTask.fromFunction(
+            f"Расчет: {c.ALGO_DISPLAY_NAME}", run_processing_in_background
         )
 
-        # Инкапсулируем логику завершения таски прямо внутри коллбэка
-        def on_task_completed(success: bool, results: dict):
+        # 3. Метод завершения таски (выполняется строго в Главном UI потоке)
+        def on_task_completed():
+            # Разблокируем UI нашего плагина (кнопка закрыть станет "Готово")
             self._dialog.set_loading_state(False)
-            if self._progress_dialog:
-                self._progress_dialog.close()
 
-            # Обработка сценария Ошибки или Отмены
-            if not success:
-                if self._current_feedback and self._current_feedback.isCanceled():
-                    self.iface.messageBar().pushMessage(
-                        "Отмена",
-                        "Расчет прерван. Предыдущий слой был удален для перезаписи.",
-                        level=Qgis.MessageLevel.Warning,
-                        duration=5,
-                    )
-                else:
-                    self.iface.messageBar().pushMessage(
-                        "Ошибка",
-                        "Ошибка при выполнении алгоритма. Предыдущий слой удален.",
-                        level=Qgis.MessageLevel.Critical,
-                        duration=5,
-                    )
-
-                # Очищаем инфраструктуру и выходим
-                self._current_context = None
-                self._current_feedback = None
-                self._progress_dialog = None
+            # ИСПРАВЛЕНИЕ: Проверяем отмену СТРОГО через сам QgsTask.
+            if task.isCanceled():
+                self._handle_failure()
+                self._clear_infrastructure()
+                self._show_message(
+                    "Отмена",
+                    "Расчет прерван пользователем.",
+                    level=Qgis.MessageLevel.Warning,
+                )
                 return
 
-            # Обработка сценария Успеха
+            # Безопасно вытаскиваем то, что вернула функция run_processing_in_background
+            task_output = task.returned_values
+
+            # Если задача завершилась аварийно или вернула пустой результат
+            if not task_output or not task_output.get("success"):
+                self._handle_failure()
+                self._clear_infrastructure()
+                self._show_message(
+                    "Ошибка",
+                    "Ошибка при выполнении алгоритма. Проверьте системный лог QGIS.",
+                    level=Qgis.MessageLevel.Critical,
+                )
+                return
+
+            # Если всё ок, извлекаем результаты
+            results = task_output.get("results", {})
             output_path = results.get(c.PARAM_OUTPUT_RASTER)
+
             if output_path and os.path.exists(output_path):
-                # Переменная should_replace подхватывается из родительского метода _execute_algorithm автоматически
-                if should_replace:
-                    # Случай А: Слой заменяется. Мы удалили старый на старте, а теперь загружаем новый файл
-                    self.layer_manager.add_new_layer(output_path, should_replace=True)
-                    self.iface.messageBar().pushMessage(
-                        "Успех",
-                        "Данные слоя успешно перезаписаны и обновлены!",
-                        level=Qgis.MessageLevel.Success,
-                        duration=3,
-                    )
-                else:
-                    # Случай Б: Загружаем на карту абсолютно новый слой со стилем
-                    self.layer_manager.add_new_layer(output_path, should_replace=False)
-                    self.iface.messageBar().pushMessage(
-                        "Успех",  # Исправлена опечатка в слове "Успех"
-                        "Новый растр добавлен на карту!",
-                        level=Qgis.MessageLevel.Success,
-                        duration=3,
-                    )
+                self.layer_manager.add_new_layer(
+                    output_path, should_replace=should_replace
+                )
+                msg = (
+                    "Данные слоя успешно перезаписаны!"
+                    if should_replace
+                    else "Новый растр добавлен на карту!"
+                )
+                self._show_message(
+                    "Успех", msg, level=Qgis.MessageLevel.Success, duration=3
+                )
 
-                # Закрываем диалоговое окно плагина через безопасный стек вызовов PyQt
-                if self._dialog:
-                    QMetaObject.invokeMethod(
-                        self._dialog, "accept", Qt.QueuedConnection
-                    )
+            self._clear_infrastructure()
 
-            # Полная очистка инфраструктурных ссылок
-            self._current_context = None
-            self._current_feedback = None
-            self._progress_dialog = None
+        # 4. Подключаем сигналы завершения (без аргументов и без лямбд!)
+        task.taskCompleted.connect(on_task_completed)
+        task.taskTerminated.connect(on_task_completed)
 
-        task.executed.connect(on_task_completed)
-        QgsApplication.taskManager().addTask(task)
-        self._progress_dialog.show()
+        return task
+
+    # --- Хелперы для уменьшения дублирования кода (Аналоги приватных методов в C#) ---
+
+    def _show_message(
+        self, title: str, text: str, level: Qgis.MessageLevel, duration: int = 5
+    ):
+        self.iface.messageBar().pushMessage(title, text, level=level, duration=duration)
+
+    def _handle_failure(self):
+        if self._current_feedback and self._current_feedback.isCanceled():
+            self._show_message(
+                "Отмена",
+                "Расчет прерван. Предыдущий слой был удален для перезаписи.",
+                Qgis.MessageLevel.Warning,
+            )
+        else:
+            self._show_message(
+                "Ошибка",
+                "Ошибка при выполнении алгоритма. Предыдущий слой удален.",
+                Qgis.MessageLevel.Critical,
+            )
+
+    def _clear_infrastructure(self):
+        self._current_context = None
+        self._current_feedback = None
+        self._progress_dialog = None
 
     def _cleanup_dialog(self):
         self._dialog = None

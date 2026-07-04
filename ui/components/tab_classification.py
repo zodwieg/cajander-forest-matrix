@@ -145,3 +145,15 @@ class ClassificationTab(QWidget):
 
     def is_replace_raster_checked(self) -> bool:
         return self.cb_replace_raster.isChecked()
+
+    def set_loading_state(self, is_loading: bool):
+        """Блокирует элементы управления вкладки классификации во время расчета"""
+        # Блокируем выбор биома
+        self.biome_selector.setEnabled(not is_loading)
+
+        # Блокируем чекбокс замены растра
+        self.cb_replace_raster.setEnabled(not is_loading)
+
+        # Блокируем всю скролл-область с динамическими полями от FormBuilder
+        # Это разом заморозит все внутренние QLineEdit/QDoubleSpinBox/QCheckBox
+        self.scroll_area.setEnabled(not is_loading)

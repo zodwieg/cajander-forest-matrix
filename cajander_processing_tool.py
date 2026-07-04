@@ -31,16 +31,13 @@ except Exception as e:
 # 3. Стандартные импорты QGIS
 from qgis.core import (
     QgsProcessingAlgorithm,
-    QgsProcessingLayerPostProcessorInterface,
     QgsProcessingParameterRasterDestination,
-    QgsProject,
-    QgsRasterLayer,
 )
 from qgis.PyQt.QtCore import QVariant
 
 # 4. СТРОГИЕ АБСОЛЮТНЫЕ ИМПОРТЫ (Аналог using в C# с указанием полного namespace)
 from .config import constants as c
-from .ui import QgisFormBuilder, QgisDataBinder
+from .ui import QgisDataBinder
 from .services import CajanderProcessingOrchestrator
 
 
@@ -48,7 +45,6 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
 
     def __init__(self):
         super().__init__()
-        self.form_builder = QgisFormBuilder(self)
         self.ui_binder = QgisDataBinder(self)
         self.orchestrator = CajanderProcessingOrchestrator()
 
@@ -60,7 +56,16 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
         )
 
     def processAlgorithm(self, parameters, context, feedback):
-        # 1. Синхронизируем коэффициенты (теперь метод сам поймет, откуда их взять — из GUI QGIS или из словаря)
+        from .services.logger_service import CajanderLogger
+
+        # Фиксируем пришедший системный feedback (который на самом деле наш ControllerLogBridge)
+        # в контексте текущего фонового потока
+        CajanderLogger.set_context_feedback(feedback)
+
+        # Теперь этот вызов автоматически уйдет через мост прямо в интерфейс LogTab
+        CajanderLogger.info("Старт фонового расчета матрицы...")
+
+        # 1. Синхронизируем коэффициенты
         self.ui_binder.sync_ui_coefficients(parameters, context)
 
         # 2. Получаем выходной путь напрямую из параметров QGIS
@@ -69,12 +74,9 @@ class CajanderMatrixAlgorithm(QgsProcessingAlgorithm):
         )
 
         # 3. Запуск расчетов оркестратором (чистая бизнес-логика в фоне)
-        if feedback:
-            feedback.pushInfo("Старт фонового расчета матрицы...")
+        self.orchestrator.run(output_path)
 
-        self.orchestrator.run(output_path, feedback)
-
-        # Возвращаем словарь с результатом, который Контроллер заберет в главном потоке
+        # Возвращаем словарь с результатом
         return {c.PARAM_OUTPUT_RASTER: output_path}
 
     def name(self):

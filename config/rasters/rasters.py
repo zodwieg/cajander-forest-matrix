@@ -9,6 +9,7 @@ from qgis.core import QgsProject, QgsRasterLayer, QgsProcessingException
 from ...core.io_handler import read_raster_band
 from .registry import REGISTRY, RasterId
 from .models import ActiveRaster
+from ...services.logger_service import CajanderLogger
 
 
 class RasterService:
@@ -26,7 +27,7 @@ class RasterService:
         self._cache: Dict[RasterId, ActiveRaster] = {}
         self._array_cache: Dict[RasterId, np.ndarray] = {}
 
-    def load_and_validate(self, feedback) -> Tuple[str, tuple, Tuple[int, int]]:
+    def load_and_validate(self) -> Tuple[str, tuple, Tuple[int, int]]:
         """
         Ищет растры в проекте QGIS, логирует процесс через feedback
         и проверяет физическое существование файлов.
@@ -35,7 +36,7 @@ class RasterService:
         self._array_cache.clear()
         project = QgsProject.instance()
 
-        feedback.pushInfo("🔍 Автоматический поиск и валидация слоев в проекте...")
+        CajanderLogger.info("🔍 Автоматический поиск и валидация слоев в проекте...")
 
         for raster_id, meta in REGISTRY.items():
             target_name = meta["qgis_layer_name"]
@@ -71,7 +72,7 @@ class RasterService:
                 id=raster_id, layer=layer, qgis_name=target_name
             )
 
-            feedback.pushInfo(
+            CajanderLogger.info(
                 f"   [ОК] Слой '{target_name}' успешно верифицирован. Путь: {source_path}"
             )
 

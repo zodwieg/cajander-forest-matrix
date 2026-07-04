@@ -117,3 +117,18 @@ class PreprocessingTab(QWidget):
                 selected_layers[key] = layer.id() if layer else None
 
         self.run_preprocessing_requested.emit(selected_layers, active_inputs)
+
+    def set_loading_state(self, is_loading: bool):
+        """Блокирует внутренние элементы управления вкладки во время расчета"""
+        # Блокируем кнопку запуска расчетов на этой вкладке
+        self.btn_calculate_indices.setEnabled(not is_loading)
+
+        # Блокируем виджет выбора индексов (если у него есть свой метод set_loading_state — вызываем его)
+        if hasattr(self.index_selector, "set_loading_state"):
+            self.index_selector.set_loading_state(is_loading)
+        else:
+            self.index_selector.setEnabled(not is_loading)
+
+        # Блокируем все выпадающие списки выбора растровых слоев
+        for combo in self._selectors.values():
+            combo.setEnabled(not is_loading)

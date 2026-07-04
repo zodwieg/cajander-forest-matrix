@@ -1,7 +1,8 @@
-from qgis.core import QgsMessageLog, Qgis, QgsProject, QgsRasterLayer, QgsTask
+# controllers/preprocessing_ui.py
+import os
+from qgis.core import QgsApplication, Qgis, QgsTask
 from ..config.preprocessing.model import PreprocessingDependencyResolver
 from ..config.preprocessing.service import DataPreparationService
-import os
 
 
 class PreprocessingUIController:
@@ -10,85 +11,78 @@ class PreprocessingUIController:
     Управляет поведением PreprocessingTab и координирует запуск ГИС-задач.
     """
 
-    def __init__(self, view, iface):
+    def __init__(self, view, iface, layer_manager):
         self.view = view  # Ссылка на PreprocessingTab (Вьюшка)
         self.iface = iface
-
-        # 1. Привязываем события от Вьюшки
-        # self.view.product_selection_changed.connect(self._on_selection_changed)
-        # self.view.run_preprocessing_requested.connect(self._on_run_requested)
+        # Внедряем менеджер слоев (передадим из MainUIController)
+        self.layer_manager = layer_manager
 
     def _on_selection_changed(self, selected_product_ids: list):
-        """Вызывается, когда юзер ставит/снимает галочки с индексов.
-
-        Контроллер пересчитывает зависимости и говорит Вьюшке перерисовать таблицу.
-        """
-        # Используем наш статический резолвер моделей
+        """Вызывается, когда юзер ставит/снимает галочки с индексов."""
         required_raw_ids = PreprocessingDependencyResolver.resolve_required_inputs(
             selected_product_ids
         )
-
-        # Передаем этот список во Вьюшку, чтобы она обновила строки в таблице
         self.view.update_required_inputs_table(required_raw_ids)
 
     def _on_run_requested(
         self, selected_products: list, user_inputs: dict, ref_path: str, output_dir: str
     ):
         """Реакция на клик по кнопке расчета индексов."""
-
         self.view.set_loading_state(True)
-        self.iface.messageBar().pushMessage(
-            "Инфо",
-            "Запущен процесс подготовки растров...",
-            level=Qgis.MessageLevel.Info,
+        self._show_message(
+            "Инфо", "Запущен процесс подготовки растров...", Qgis.MessageLevel.Info
         )
 
-        # Создаем экземпляр нашего нового сервиса обработки
-        # Передаем ему параметры, собранные из UI
         prep_service = DataPreparationService(
             reference_raster_path=ref_path, output_dir=output_dir
         )
 
-        def on_finished(exception, result_files):
-            self.view.set_loading_state(False)
-            if exception:
-                self.iface.messageBar().pushMessage(
-                    "Ошибка",
-                    f"Провал подготовки данных: {exception}",
-                    level=Qgis.MessageLevel.Critical,
-                )
-            else:
-                # Автоматически загружаем созданные растры в проект QGIS, чтобы юзер их увидел
-                for file_path in result_files:
-                    base_name = os.path.basename(file_path).replace(".tif", "")
-                    QgsProject.instance().addMapLayer(
-                        QgsRasterLayer(file_path, base_name)
-                    )
-
-                self.iface.messageBar().pushMessage(
-                    "Успех",
-                    "Все индексы успешно рассчитаны и добавлены в проект!",
-                    level=Qgis.MessageLevel.Success,
-                )
-
-        # Обертка для QgsTask, куда мы передаем управление нашему сервису
+        # 1. Фоновая функция (выполняется в отдельном потоке)
+        # Убираем try/except. Если упадет — упадет штатно в task.taskTerminated
         def heavy_gis_job(task_feedback):
-            try:
-                # Вызываем тяжелую работу внутри сервиса, передавая ему task_feedback для логов
-                files = prep_service.process(
-                    selected_products, user_inputs, task_feedback
-                )
-                return True, files
-            except Exception as e:
-                return False, e
+            return prep_service.process(selected_products, user_inputs, task_feedback)
 
-        # Запускаем фоновую задачу QGIS
+        # 2. Создаем задачу
         task = QgsTask.fromFunction("Подготовка спутниковых данных", heavy_gis_job)
 
-        # Подписываем обработчики завершения
-        task.taskCompleted.connect(lambda: on_finished(None, task.returned_values()[1]))
-        task.taskTerminated.connect(
-            lambda: on_finished("Процесс был прерван пользователем", [])
-        )
+        # 3. Обработчики завершения (выполняются в Главном UI-потоке)
+        def on_success():
+            self.view.set_loading_state(False)
 
-        QgsProject.instance().taskManager().addTask(task)
+            # Получаем чистый результат выполнения без кортежей
+            result_files = task.returned_values()
+
+            if result_files:
+                for file_path in result_files:
+                    # Делегируем добавление слоев нашему менеджеру
+                    self.layer_manager.add_new_layer(file_path, should_replace=False)
+
+                self._show_message(
+                    "Успех",
+                    "Все индексы успешно рассчитаны и добавлены в проект!",
+                    Qgis.MessageLevel.Success,
+                )
+
+        def on_failed():
+            self.view.set_loading_state(False)
+
+            # Извлекаем исключение, если оно было выброшено внутри heavy_gis_job
+            exception = task.exception()
+            error_msg = (
+                f"Провал подготовки данных: {exception}"
+                if exception
+                else "Процесс был прерван пользователем."
+            )
+
+            self._show_message("Ошибка", error_msg, Qgis.MessageLevel.Critical)
+
+        # Подписываемся на сигналы таски безопасности ради
+        task.taskCompleted.connect(on_success)
+        task.taskTerminated.connect(on_failed)
+
+        # Запускаем в менеджере QGIS
+        QgsApplication.taskManager().addTask(task)
+
+    def _show_message(self, title: str, text: str, level: Qgis.MessageLevel):
+        """Хелпер для вывода сообщений в messageBar QGIS"""
+        self.iface.messageBar().pushMessage(title, text, level=level)
