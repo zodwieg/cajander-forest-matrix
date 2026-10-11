@@ -40,7 +40,7 @@
 
         <!-- === ВАЛИДНЫЕ КЛАССЫ === -->
         <!-- 1xx: Сухие -->
-        <paletteEntry label="100 — Сухой луг / Вырубка / Пески" value="100" alpha="255" color="#F3E1B6"/>
+        <paletteEntry label="100 — Сухой луг / Вырубка / Пески" value="100" alpha="255" color=" "/>
         <paletteEntry label="111 — Сухое сосновое редколесье" value="111" alpha="255" color="#EED07E"/>
         <paletteEntry label="112 — Сухой молодой сосново-березовый лес" value="112" alpha="255" color="#EED07E"/>
         <paletteEntry label="121 — Сухой брусничный сосняк" value="121" alpha="255" color="#E5B842"/>

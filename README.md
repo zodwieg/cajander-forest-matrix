@@ -1,50 +1,44 @@
-# Алгоритм классификации биомов лесов Каяндера (QGIS + Python)
+# Cajander Forest Matrix Classifier (QGIS Plugin)
 
-Модульный инструмент для автоматического выделения и классификации лесных биомов Каяндера на основе матричных вычислений и растрового анализа в QGIS 3.
+A high-performance QGIS plugin designed for **automated forest biome classification** using satellite imagery (Sentinel-2) and digital elevation models (Copernicus DEM). The core analytical engine replicates the Cajander forest site type classification system by analyzing multi-spectral indices, soil moisture patterns, and terrain morphometry.
 
-## 🏗️ Архитектура проекта (Separation of Concerns)
+<p align="center">
+  <img src="images/screenshot1.png" width="45%" alt="Biome Classification Tab" />
+  <img src="images/screenshot2.png" width="45%" alt="Index Preparation Tab" />
+</p>
 
-Архитектура проекта построена по принципам Clean Architecture / DDD, разделяя логику интерфейса QGIS, конфигурацию и тяжелые математические расчеты на NumPy:
+## 🚀 Key Features & Domain Logic
 
-* **`cajander_processing_tool.py`** — Единая точка входа (Bootstrapper). Отвечает за динамическую регистрацию алгоритма в QGIS Processing API и управление жизненным циклом.
-* **`config/`** — Слой конфигурации.
-  *`constants.py` — Статичные идентификаторы, имена слоев, `NODATA` значения и динамический расчет корня проекта (`PROJECT_ROOT`).
-  *`coefficients.py` — Single Source of Truth для калибровочных коэффициентов. Реализует атомарную потокобезопасную запись/чтение через `.tmp` файлы.
-* **`ui/`** — Слой представления (Интерфейс).
-  *`form_builder.py` — Динамическая сборка GUI на основе реестра коэффициентов.
-  *`data_binder.py` — Извлечение данных из виджетов QGIS и маппинг в строго типизированный DTO.
-* **`core/`** — Бизнес-логика (Домен).
-  *`classifiers/` — Изолированные чистые функции фильтрации и классификации («сито» на NumPy).
-  *`io_handler.py` — Чтение и валидация геоданных из текущего проекта QGIS.
-* **`services/`** — Слой оркестрации.
-  *`orchestrator.py` — Управляет шагами расчета, реализует Explicit Dependency Injection (внедрение коэффициентов сквозь вызовы).
+*   **Multi-Spectral & Morphometric Analysis**: Evaluates raw satellite bands and calculated indices across multiple dimensions:
+    *   *Vegetation Indices*: NDVI (Spring/Summer), NDRE (Chlorophyll/RedEdge).
+    *   *Moisture Indices*: NDWI (Vegetation liquid water), NDII (Moisture intensity).
+    *   *Terrain Morphometry*: Slope analysis and Topographic Wetness Index (TWI) derived from Digital Elevation Models (DEM).
+*   **Decoupled State Management**: Advanced UI built with PyQt/PySide that dynamically maps spatial parameters, threshold selections, and raster layer dependencies without locking the QGIS main thread.
 
-## 🚀 Настройка окружения разработчика (VS Code)
+## 🏗️ Architectural & Engineering Highlights
 
-Так как скрипт выполняется во встроенном интерпретаторе QGIS, для работы автодополнения (IntelliSense) и устранения ошибок импорта Pylance (`Could not be resolved`) необходимо настроить рабочую область.
+This project was built with strict adherence to professional software engineering patterns, moving away from the typical monolithic script approach found in many GIS utilities:
 
-Создайте файл `.vscode/settings.json` в корне проекта:
+### ⚡ The "Sieve" Pipeline (NumPy Vectorization)
+To process heavy raster datasets efficiently without memory bottlenecks, the plugin utilizes a **Pipeline / Chain of Responsibility** pattern driven entirely by **NumPy vector computations**:
+1.  The orchestrator initializes a high-performance memory grid matching the target bounding box and resolution.
+2.  Data runs through independent, decoupled classification modules (e.g., `classify_biome_400` for open sphagnum bogs).
+3.  Each module fetches only its required spectral bands or indices via a dedicated Data Service, applies lightning-fast mask operations, and modifies the state matrix. This allows adding new biomes or shifting criteria without core refactoring.
 
-```json
-{
-    "python.analysis.extraPaths": [
-        "путь к директории проекта"
-    ],
-    "python.autoComplete.extraPaths": [
-        "путь к директории проекта"
-    ]
-}
-```
+### 🧩 Clean Architecture & Dependency Injection
+*   **Separation of Concerns (SoC)**: Complete isolation between QGIS GUI components, data access layers, and pure domain classification logic.
+*   **Explicit Dependency Injection**: Business logic components receive spatial services and raster providers via DI, ensuring the analytical core remains highly testable and maintainable.
+*   **Hot Module Replacement (HMR) for Debugging**: Includes a custom-built runtime cache-busting mechanism (`sys.modules` reset) allowing continuous development and live UI/logic updates directly inside QGIS without restarting the desktop application.
 
-*Укажите путь к директории, в которой лежит папка `qgis_cajander_matrix`.*
+## 📊 Data Requirements
 
-## ⚡ Горячая перезагрузка модулей (HMR)
+The plugin is designed to seamlessly integrate with open enterprise spatial data. It targets and runs vector calculations on pre-loaded project layers containing:
+*   **Sentinel-2** multi-spectral imagery (specifically targeting March B04, May NDWI, July NDVI/NDRE/NDII).
+*   **Copernicus DEM** (or any valid regional Digital Elevation Model) for computing slope and hydrological TWI grids.
 
-В точку входа встроен механизм автоматического сброса кэша импортов `sys.modules` (`reload_project_modules`). Вы можете вносить изменения в любой файл пакета (`orchestrator.py`, `coefficients.py` и т.д.) — при следующем запуске алгоритма из панели Processing QGIS автоматически подтянет обновленный код **без перезапуска самой программы**.
+## 🛠️ Tech Stack
 
-## 🛠️ Установка в QGIS
-
-1. Откройте QGIS.
-2. Панель инструментов **Анализ (Processing Toolbox)** -> Кнопка с логотипом Python -> **Добавить скрипт из файла...**
-3. Выберите файл `cajander_processing_tool.py`.
-4. Убедитесь, что файл стиля `cajander_style.qml` находится в одной папке с файлом точки входа — скрипт подтянет его автоматически.
+*   **Host Environment**: QGIS 3.x API
+*   **Language**: Python 3
+*   **GUI Framework**: PyQt / PySide
+*   **Math & Data Science**: NumPy

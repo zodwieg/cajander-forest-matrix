@@ -46,60 +46,78 @@ RAW_INPUTS_REGISTRY: Dict[RawInputId, RawInputMeta] = {
         "label": "B04 (Red) | Март",
         "native_res": 10,
         "suggested_name": "B04_March",
+        "month_weight": 1,
+        "channel_weight": 4,
     },
     "raw_b04_may": {
         "id": "raw_b04_may",
         "label": "B04 (Red) | Май",
         "native_res": 10,
         "suggested_name": "B04_May",
+        "month_weight": 2,
+        "channel_weight": 4,
     },
     "raw_b04_jul": {
         "id": "raw_b04_jul",
         "label": "B04 (Red) | Июль",
         "native_res": 10,
         "suggested_name": "B04_July",
+        "month_weight": 3,
+        "channel_weight": 4,
     },
     "raw_b05_jul": {
         "id": "raw_b05_jul",
         "label": "B05 (RedEdge) | Июль",
         "native_res": 20,
         "suggested_name": "B05_July",
+        "month_weight": 3,
+        "channel_weight": 5,
     },
     "raw_b08_may": {
         "id": "raw_b08_may",
         "label": "B08 (NIR) | Май",
         "native_res": 10,
         "suggested_name": "B08_May",
+        "month_weight": 2,
+        "channel_weight": 8,
     },
     "raw_b08_jul": {
         "id": "raw_b08_jul",
         "label": "B08 (NIR) | Июль",
         "native_res": 10,
         "suggested_name": "B08_July",
+        "month_weight": 3,
+        "channel_weight": 8,
     },
     "raw_b11_may": {
         "id": "raw_b11_may",
         "label": "B11 (SWIR) | Май",
         "native_res": 20,
         "suggested_name": "B11_May",
+        "month_weight": 2,
+        "channel_weight": 11,
     },
     "raw_b11_jul": {
         "id": "raw_b11_jul",
         "label": "B11 (SWIR) | Июль",
         "native_res": 20,
         "suggested_name": "B11_July",
+        "month_weight": 3,
+        "channel_weight": 11,
     },
     "raw_dem": {
         "id": "raw_dem",
         "label": "Copernicus DEM",
         "native_res": 30,
         "suggested_name": "Copernicus_DEM",
+        "month_weight": 99,
+        "channel_weight": 99,
     },
 }
 
-# Реестр рецептов. Связывает твои RasterId с необходимыми RawInputId
+
 PRODUCTS_RECIPES: Dict[RasterId, ProductRecipeMeta] = {
-    # 🌱 ВЕГЕТАЦИОННЫЕ ИНДЕКСЫ
+    # ВЕГЕТАЦИОННЫЕ ИНДЕКСЫ
     "NDVI_5": {
         "id": "NDVI_5",
         "label": "NDVI Май (Растительность весной)",
@@ -118,7 +136,7 @@ PRODUCTS_RECIPES: Dict[RasterId, ProductRecipeMeta] = {
         "group": "vegetation",
         "required_inputs": ["raw_b08_jul", "raw_b05_jul"],
     },
-    # 💧 ИНДЕКСЫ ВЛАЖНОСТИ
+    # ИНДЕКСЫ ВЛАЖНОСТИ
     "NDWI_5": {
         "id": "NDWI_5",
         "label": "NDWI Май (Влажность растительности)",
@@ -137,7 +155,7 @@ PRODUCTS_RECIPES: Dict[RasterId, ProductRecipeMeta] = {
         "group": "moisture",
         "required_inputs": ["raw_b08_jul", "raw_b11_jul"],
     },
-    # ⛰️ МОРФОМЕТРИЯ РЕЛЬЕФА
+    # МОРФОМЕТРИЯ РЕЛЬЕФА
     "DEM": {
         "id": "DEM",
         "label": "Цифровая модель рельефа (DEM)",
@@ -156,7 +174,7 @@ PRODUCTS_RECIPES: Dict[RasterId, ProductRecipeMeta] = {
         "group": "terrain",
         "required_inputs": ["raw_dem"],
     },
-    # ❄️ БАЗОВЫЕ КАНАЛЫ
+    # БАЗОВЫЕ КАНАЛЫ
     "B04_3": {
         "id": "B04_3",
         "label": "Канал B04 Март (Снег / Ранняя весна)",

@@ -11,7 +11,6 @@ from .recipes import (
     RawInputMeta,
 )
 from .model import PreprocessingDependencyResolver
-from .service import DataPreparationService
 
 # Явно определяем, что доступно при импорте "from config.preprocessing import *"
 __all__ = [
@@ -23,5 +22,4 @@ __all__ = [
     "PRODUCTS_RECIPES",
     "GROUP_LABELS",
     "PreprocessingDependencyResolver",
-    "DataPreparationService",
 ]
